@@ -12,48 +12,54 @@ if len(sys.argv) < 2:
 pmid = sys.argv[1]
 print('retrieving PMID', pmid)
 
-# make HTTP request to Pubmed
-url='https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=%s&retmode=xml' % pmid
-resp = requests.get(url) 
+def get_abstract(pmid):
+    # make HTTP request to Pubmed
+    url='https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=%s&retmode=xml' % pmid
+    resp = requests.get(url) 
+    # verify response is OK
+    if resp.status_code != requests.codes.ok:
+        raise ValueError('Error retrieving PubMed data. Received HTTP code' + str(resp.status_code))
 
-# verify response is OK
-if resp.status_code != requests.codes.ok:
-    raise ValueError('Error retrieving PubMed data. Received HTTP code' + str(resp.status_code))
+    print('PubMed data received')
 
-print('PubMed data received')
+    # parse XML
+    root = ET.fromstring(resp.text)
+    abstract = root.find('PubmedArticle/MedlineCitation/Article/Abstract/AbstractText')
 
-# parse XML
-root = ET.fromstring(resp.text)
-abstract = root.find('PubmedArticle/MedlineCitation/Article/Abstract/AbstractText')
+    # verify abstract exists
+    if not abstract:
+        raise ValueError('Cannot find abstract in XML')
 
-# verify abstract exists
-if not abstract:
-    raise ValueError('Cannot find abstract in XML')
+    # join abstract text
+    abstract_text = ' '.join(abstract.itertext())
 
-# join abstract text
-abstract_text = ' '.join(abstract.itertext())
+    return abstract_text
 
-# create REACH request parameters
-params = {
-    'text': abstract_text,
-    'output': 'fries',
-}
 
-# make post request
-r = requests.post('http://agathon.sista.arizona.edu:8080/odinweb/api/text', params=params)
+def save_json(abstract_text):
+    # create REACH request parameters
+    params = {
+        'text': abstract_text,
+        'output': 'fries',
+    }
 
-# parse json data
-data = json.loads(r.text)
+    # make post request
+    r = requests.post('http://agathon.sista.arizona.edu:8080/odinweb/api/text', params=params)
 
-# print statisics
-print('REACH data statistics:')
-for key in data:
-    print(key, len(data[key]), 'elements')
-print()
+    # parse json data
+    data = json.loads(r.text)
 
-# save data
-filename = pmid + '.json'
-print ('saving', filename)
-with open(filename, 'w', encoding='utf-8') as f:
-    f.write(r.text)
+    # print statisics
+    print('REACH data statistics:')
+    for key in data:
+        print(key, len(data[key]), 'elements')
+    print()
 
+    # save data
+    filename = pmid + '.json'
+    print ('saving', filename)
+    with open(filename, 'w', encoding='utf-8') as f:
+        f.write(r.text)
+
+abstract_text = get_abstract(pmid)
+save_json(abstract_text)
